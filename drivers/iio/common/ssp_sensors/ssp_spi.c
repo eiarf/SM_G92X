@@ -711,10 +711,13 @@ int ssp_get_chipid(struct ssp_data *data)
  *
  * Returns 0 or negative value in case of error
  */
-int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len)
+int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u16 len)
 {
 	struct ssp_msg *msg;
 	int ret;
+
+	if (!len)
+		return -EINVAL;
 
 	msg = ssp_create_msg(cmd, len, SSP_AP2HUB_WRITE, 0);
 	if (!msg)
@@ -723,6 +726,26 @@ int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len)
 	ssp_fill_buffer(msg, 0, buf, len);
 
 	ret = ssp_spi_sync(data, msg, 1000);
+	ssp_clean_msg(msg);
+
+	return ret;
+}
+
+int ssp_read_cmd(struct ssp_data *data, u8 cmd, void *buf, u16 len)
+{
+	struct ssp_msg *msg;
+	int ret;
+
+	if (!len)
+		return -EINVAL;
+
+	msg = ssp_create_msg(cmd, len, SSP_AP2HUB_READ, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	ret = ssp_spi_sync(data, msg, 1000);
+	if (ret >= 0)
+		ssp_get_buffer(msg, 0, buf, len);
 	ssp_clean_msg(msg);
 
 	return ret;

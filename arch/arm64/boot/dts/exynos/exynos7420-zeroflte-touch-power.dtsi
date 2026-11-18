@@ -118,6 +118,28 @@
 					regulator-max-microvolt = <3000000>;
 				};
 
+				/* MAX86900 HRM digital 1.8V supply (stock LDO18). */
+				hrm_vdd_ldo18: LDO18 {
+					regulator-name = "HRM_VDD_1.8V";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1850000>;
+				};
+
+				/* S3FWRN5 NFC I2C 1.8V pull-up supply (stock LDO20). */
+				nfc_i2c_ldo20: LDO20 {
+					regulator-name = "VDD20_1P8_AP";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-boot-on;
+				};
+
+				/* MAX86900 HRM LED 3.3V supply (stock LDO24). */
+				hrm_led_ldo24: LDO24 {
+					regulator-name = "V_HRM_3.3V";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3350000>;
+				};
+
 				/* Touch key core supply; the 3.10 driver enables it at probe. */
 				touchkey_vdd_ldo21: LDO21 {
 					regulator-name = "vtouch_3.3v";

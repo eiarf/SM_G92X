@@ -70,4 +70,11 @@ source "drivers/nfc/st-nci/Kconfig"
 source "drivers/nfc/nxp-nci/Kconfig"
 source "drivers/nfc/s3fwrn5/Kconfig"
 source "drivers/nfc/st95hf/Kconfig"
+config SEC_NFC_I2C
+	tristate "Samsung S3FWRN5 NFC I2C char driver (/dev/sec-nfc)"
+	depends on I2C
+	help
+	  Say Y or M here to enable Samsung's /dev/sec-nfc I2C character
+	  device driver for S3FWRN5 NFC controllers on Exynos 7420.
+
 endmenu

@@ -938,6 +938,9 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 
 	exynos5_i2c_reset(i2c);
 
+	if (i2c->secure_pins_bus >= 0 && i2c->secure_pins_bus != 7)
+		i2c->restore_pins = true;
+
 	ret = i2c_add_adapter(&i2c->adap);
 	if (ret < 0)
 		goto err_clk;

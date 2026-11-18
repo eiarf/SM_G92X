@@ -45,6 +45,7 @@
 		i2c3 = &i2c_max77843;
 		i2c4 = "/i2c-amp";
 		i2c5 = &hsi2c_7;
+		i2c9 = &hsi2c_6;
 	};
 
 	chosen {
@@ -213,6 +214,13 @@
 			#clock-cells = <0>;
 			clock-frequency = <26000000>;
 			clock-output-names = "sclk_phy_fsys1_26m";
+		};
+
+		hsi2c6_clk: clock-hsi2c6 {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <133000000>;
+			clock-output-names = "hsi2c6_pclk";
 		};
 
 		hsi2c7_clk: clock-hsi2c7 {
@@ -1282,6 +1290,44 @@
 			opp-hz = /bits/ 64 <700000000>;
 			opp-microvolt = <893750>;
 		};
+	};
+};
+
+&hsi2c_6 {
+	/* PCLK_HSI2C6 lives in the disabled CMU_PERIC1; S-Boot leaves it on. */
+	clocks = <&hsi2c6_clk>;
+	/*
+	 * The gpj0 pins sit on the secure-owned pinctrl_nfc (kept disabled).
+	 * Deep sleep resets their mux; the secure firmware restores bus 6.
+	 */
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+	samsung,secure-pins-bus = <6>;
+	clock-frequency = <400000>;
+	status = "okay";
+
+	max86900@51 {
+		compatible = "maxim,max86900";
+		reg = <0x51>;
+		interrupt-parent = <&gpa1>;
+		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+		vdd-supply = <&hrm_vdd_ldo18>;
+		led-supply = <&hrm_led_ldo24>;
+	};
+
+	sec-nfc@27 {
+		compatible = "samsung,sec-nfc";
+		reg = <0x27>;
+		interrupt-parent = <&gpa0>;
+		interrupts = <6 IRQ_TYPE_EDGE_RISING>;
+		ven-gpios = <&gpf1 5 GPIO_ACTIVE_HIGH>;
+		firm-gpios = <&gpf5 4 GPIO_ACTIVE_HIGH>;
+		clk-req-gpios = <&gpa2 6 GPIO_ACTIVE_HIGH>;
+		vdd-supply = <&nfc_i2c_ldo20>;
+		clocks = <&clock_top0 CLK_SCLK_ISP_SENSOR1>;
+		clock-names = "sclk_isp_sensor1";
+		assigned-clocks = <&clock_top0 CLK_MOUT_SCLK_ISP_SENSOR1>;
+		assigned-clock-parents = <&fin_pll>;
 	};
 };
 

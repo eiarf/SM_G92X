@@ -9,11 +9,14 @@
  */
 
 #include <linux/bcm4773.h>
+#include <linux/device.h>
 #include <linux/mfd/core.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <asm/unaligned.h>
 
 #include "ssp.h"
@@ -283,6 +286,101 @@ static int ssp_bbd_parse_dt(struct ssp_data *data)
 	return 0;
 }
 
+#define SSP_IRLED_MAX_BUF	1024
+
+static ssize_t vendor_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	return sysfs_emit(buf, "AMS\n");
+}
+static DEVICE_ATTR_RO(vendor);
+
+static ssize_t name_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	return sysfs_emit(buf, "TMG399x\n");
+}
+static DEVICE_ATTR_RO(name);
+
+static ssize_t irled_send_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n",
+			  READ_ONCE(data->hub_ready) &&
+			  (data->available_sensors & BIT(SSP_BBD_PROX_HUB_ID)) ? 1 : 0);
+}
+
+static ssize_t irled_send_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+	char *kbuf;
+	size_t len;
+	int ret;
+
+	if (!count || count >= SSP_IRLED_MAX_BUF)
+		return -EINVAL;
+	if (!READ_ONCE(data->hub_ready) || data->shut_down)
+		return -EAGAIN;
+	if (!(data->available_sensors & BIT(SSP_BBD_PROX_HUB_ID)))
+		return -ENODEV;
+
+	kbuf = kzalloc(count + 1, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	memcpy(kbuf, buf, count);
+	len = count;
+	while (len > 0 && (kbuf[len - 1] == '\n' || kbuf[len - 1] == '\r' ||
+			   kbuf[len - 1] == '\0'))
+		kbuf[--len] = '\0';
+
+	if (!len) {
+		kfree(kbuf);
+		return -EINVAL;
+	}
+
+	ret = ssp_write_cmd(data, SSP_MSG2SSP_AP_IRDATA_SEND, kbuf, (u16)(len + 1));
+	kfree(kbuf);
+	if (ret < 0) {
+		dev_err(data->dev, "IRDATA_SEND failed: %d\n", ret);
+		return ret;
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RW(irled_send);
+
+static ssize_t irled_send_result_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+	u8 result = 0;
+	int ret;
+
+	if (!READ_ONCE(data->hub_ready) || data->shut_down)
+		return -EAGAIN;
+
+	ret = ssp_read_cmd(data, SSP_MSG2SSP_AP_IRDATA_SEND_RESULT, &result, 1);
+	if (ret < 0)
+		return ret;
+
+	return sysfs_emit(buf, "%u\n", result);
+}
+static DEVICE_ATTR_RO(irled_send_result);
+
+static struct attribute *ssp_irled_attrs[] = {
+	&dev_attr_vendor.attr,
+	&dev_attr_name.attr,
+	&dev_attr_irled_send.attr,
+	&dev_attr_irled_send_result.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(ssp_irled);
+
 static int ssp_bbd_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -316,16 +414,39 @@ static int ssp_bbd_probe(struct platform_device *pdev)
 		goto err_release;
 	}
 
+	data->sensors_class = class_create("sensors");
+	if (!IS_ERR(data->sensors_class)) {
+		data->irled_dev = device_create_with_groups(data->sensors_class,
+							    dev, 0, data,
+							    ssp_irled_groups,
+							    "irled_remote");
+		if (IS_ERR(data->irled_dev)) {
+			dev_warn(dev, "irled_remote sysfs create failed: %ld\n",
+				 PTR_ERR(data->irled_dev));
+			data->irled_dev = NULL;
+			class_destroy(data->sensors_class);
+			data->sensors_class = NULL;
+		}
+	} else {
+		dev_warn(dev, "sensors class create failed: %ld\n",
+			 PTR_ERR(data->sensors_class));
+		data->sensors_class = NULL;
+	}
+
 	/* Calls ssp_bbd_ready() at once if the hub already runs. */
 	ret = bcm4773_register_client(data->hub, &ssp_bbd_client_ops, data);
 	if (ret) {
 		dev_err_probe(dev, ret, "cannot attach to the BCM4773\n");
-		goto err_mfd;
+		goto err_irled;
 	}
 
 	return 0;
 
-err_mfd:
+err_irled:
+	if (data->irled_dev)
+		device_unregister(data->irled_dev);
+	if (data->sensors_class)
+		class_destroy(data->sensors_class);
 	mfd_remove_devices(dev);
 err_release:
 	ssp_data_release(data);
@@ -336,6 +457,10 @@ static void ssp_bbd_remove(struct platform_device *pdev)
 {
 	struct ssp_data *data = platform_get_drvdata(pdev);
 
+	if (data->irled_dev)
+		device_unregister(data->irled_dev);
+	if (data->sensors_class)
+		class_destroy(data->sensors_class);
 	mfd_remove_devices(&pdev->dev);
 
 	bcm4773_unregister_client(data->hub);

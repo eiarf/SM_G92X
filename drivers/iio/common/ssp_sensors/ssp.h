@@ -97,6 +97,8 @@ enum {
 #define SSP_MSG2SSP_AP_SET_MAGNETIC_STATIC_MATRIX	0xfd
 #define SSP_MSG2SSP_AP_SENSOR_TILT			0xea
 #define SSP_MSG2SSP_AP_GLASS_TYPE			0xec
+#define SSP_MSG2SSP_AP_IRDATA_SEND			0x38
+#define SSP_MSG2SSP_AP_IRDATA_SEND_RESULT		0x39
 #define SSP_MSG2SSP_AP_MCU_SET_TIME			0xfe
 #define SSP_MSG2SSP_AP_MCU_GET_TIME			0xff
 
@@ -296,6 +298,8 @@ struct ssp_data {
 	u32 glass_type;
 	u32 prox_thresh[2];
 	u8 mag_matrix[18];
+	struct class *sensors_class;
+	struct device *irled_dev;
 
 	__le16 header_buffer[SSP_HEADER_BUFFER_SIZE / sizeof(__le16)] __aligned(IIO_DMA_MINALIGN);
 };
@@ -308,7 +312,8 @@ void ssp_data_release(struct ssp_data *data);
 void ssp_enable_mcu(struct ssp_data *data, bool enable);
 int ssp_initialize_mcu(struct ssp_data *data);
 void ssp_resync_sensors(struct ssp_data *data);
-int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len);
+int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u16 len);
+int ssp_read_cmd(struct ssp_data *data, u8 cmd, void *buf, u16 len);
 int ssp_hub_id(struct ssp_data *data, enum ssp_sensor_type type);
 
 #ifdef CONFIG_IIO_SSP_SENSORHUB_BCM4773
