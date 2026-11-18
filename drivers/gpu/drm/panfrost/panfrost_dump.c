@@ -203,8 +203,7 @@ void panfrost_core_dump(struct panfrost_job *job)
 		bo = to_panfrost_bo(job->bos[i]);
 		mapping = job->mappings[i];
 
-		if (!bo->base.sgt) {
-			dev_err(pfdev->dev, "Panfrost Dump: BO has no sgt, cannot dump\n");
+		if (bo->base.base.import_attach || !bo->base.sgt) {
 			iter.hdr->bomap.valid = 0;
 			goto dump_header;
 		}
